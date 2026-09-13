@@ -1,10 +1,11 @@
 # pmacct-ndpi
 
+```yaml
 version: '3.8'
 
 services:
   pmacct:
-    image: ghcr.io/你的用户名/pmacct-ndpi-docker:latest
+    image: ghcr.io/youfly/pmacct-ndpi-docker:latest
     container_name: pmacct-dpi
     network_mode: "host"
     cap_add:
