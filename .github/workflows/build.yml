@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
+    inputs:
+      force:
+        description: '强制重新构建（即使没有任何变化）'
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -22,12 +27,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 【修复点 1】设置 QEMU：让 amd64 的 Runner 能模拟编译 arm64
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # 【修复点 2 · 核心】设置 Buildx：创建 docker-container 驱动的 builder
-      # 没有这一步，cache-to 和多平台构建都会报错！
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -38,38 +40,52 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get upstream versions
+      # 本地构建文件哈希（Dockerfile + 所有 .sh）
+      - name: Compute build context hash
+        id: ctx
+        run: |
+          CTX_HASH=$(echo "${{ hashFiles('Dockerfile', '*.sh') }}" | cut -c1-8)
+          echo "hash=$CTX_HASH" >> $GITHUB_OUTPUT
+          echo "📦 Local build-context hash: $CTX_HASH"
+
+      # 【精简】只追踪 pmacct 上游，不再检查 nDPI
+      - name: Get upstream pmacct version
         id: versions
         run: |
           PMACCT_COMMIT=$(git ls-remote https://github.com/pmacct/pmacct.git HEAD | awk '{print $1}' | cut -c1-7)
           echo "pmacct_tag=$PMACCT_COMMIT" >> $GITHUB_OUTPUT
           echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
-      - name: Check if upstream changed
+      - name: Check if rebuild needed
         id: check
         run: |
-          IMAGE_PATH="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pmacct-${{ steps.versions.outputs.pmacct_tag }}"
-          if docker manifest inspect $IMAGE_PATH > /dev/null 2>&1; then
-            echo "upstream_changed=false" >> $GITHUB_OUTPUT
-            echo "✅ Upstream not changed. Skipping build."
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "need_build=true" >> $GITHUB_OUTPUT
+            echo "⚡ Force rebuild requested."
+            exit 0
+          fi
+          IMAGE_PATH="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pmacct-${{ steps.versions.outputs.pmacct_tag }}-ctx-${{ steps.ctx.outputs.hash }}"
+          if docker manifest inspect "$IMAGE_PATH" > /dev/null 2>&1; then
+            echo "need_build=false" >> $GITHUB_OUTPUT
+            echo "✅ pmacct upstream unchanged AND local files unchanged. Skipping."
           else
-            echo "upstream_changed=true" >> $GITHUB_OUTPUT
-            echo "🚀 Upstream updated! Starting build."
+            echo "need_build=true" >> $GITHUB_OUTPUT
+            echo "🚀 Local files or pmacct upstream changed. Building."
           fi
 
       - name: Extract metadata
         id: meta
-        if: steps.check.outputs.upstream_changed == 'true'
+        if: steps.check.outputs.need_build == 'true'
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
             type=raw,value=${{ steps.versions.outputs.date_tag }}
-            type=raw,value=pmacct-${{ steps.versions.outputs.pmacct_tag }}
+            type=raw,value=pmacct-${{ steps.versions.outputs.pmacct_tag }}-ctx-${{ steps.ctx.outputs.hash }}
 
       - name: Build and push Docker image
-        if: steps.check.outputs.upstream_changed == 'true'
+        if: steps.check.outputs.need_build == 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -79,4 +95,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          
