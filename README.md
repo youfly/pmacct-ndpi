@@ -26,20 +26,3 @@ services:
       - ./pmacct_data:/data
     restart: unless-stopped
 
-  grafana:
-    image: grafana/grafana:10.4.0
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_INSTALL_PLUGINS=frser-sqlite-datasource
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./pmacct_data/pmacct.db:/var/lib/grafana/pmacct.db:ro
-    restart: unless-stopped
-    depends_on:
-      - pmacct
-
-volumes:
-  grafana_data:
