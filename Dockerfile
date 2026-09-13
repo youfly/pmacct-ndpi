@@ -5,15 +5,17 @@ FROM debian:bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 【核心修复】：加入 zlib1g-dev（SQL 插件的强制依赖）
 RUN apt-get update && apt-get install -y \
     build-essential git autoconf automake libtool pkg-config \
     libpcap-dev libsqlite3-dev libjansson-dev zlib1g-dev \
     libmnl-dev libnuma-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 编译 nDPI
-RUN git clone --depth 1 https://github.com/ntop/nDPI.git /tmp/nDPI && \
+# 【核心修复】：锁定 nDPI 稳定分支，绝不使用默认 dev 分支
+# 按 4.14 -> 4.12 -> 4.10 顺序回退，保证总能拿到一个 API 冻结的稳定版
+RUN (git clone --depth 1 --branch 4.14-stable https://github.com/ntop/nDPI.git /tmp/nDPI || \
+     git clone --depth 1 --branch 4.12-stable https://github.com/ntop/nDPI.git /tmp/nDPI || \
+     git clone --depth 1 --branch 4.10-stable https://github.com/ntop/nDPI.git /tmp/nDPI) && \
     cd /tmp/nDPI && \
     ./autogen.sh && \
     ./configure && \
@@ -41,7 +43,6 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 【核心修复】：运行时加入 zlib1g
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap0.8 libsqlite3-0 libjansson4 zlib1g \
     libmnl0 libnuma1 \
