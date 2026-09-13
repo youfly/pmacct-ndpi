@@ -18,28 +18,30 @@ RUN (git clone --depth 1 --branch 4.14-stable https://github.com/ntop/nDPI.git /
     ./autogen.sh && \
     ./configure --prefix=/usr/local --libdir=/usr/local/lib && \
     make -j2 && \
-    make install && \
-    ldconfig
+    make install
 
-# 【自检+自愈 1】打印真实安装布局；缺 libndpi.so 链接名就手动补；库文件彻底不在则硬失败并打印真实位置
-RUN echo '=== /usr/local/lib layout after nDPI install:'; ls -lR /usr/local/lib | head -60; \
-    for d in /usr/local/lib /usr/local/lib/x86_64-linux-gnu /usr/local/lib/aarch64-linux-gnu; do \
-      [ -d "$d" ] || continue; \
-      real=$(ls "$d"/libndpi.so.* 2>/dev/null | grep -v '\.so$' | head -n1); \
-      if [ -n "$real" ] && [ ! -e "$d/libndpi.so" ]; then \
-        ln -s "$(basename "$real")" "$d/libndpi.so"; \
-        echo "🔧 created missing linker symlink: $d/libndpi.so -> $(basename "$real")"; \
-      fi; \
-    done; \
-    { test -e /usr/local/lib/libndpi.so || \
-      test -e /usr/local/lib/x86_64-linux-gnu/libndpi.so || \
-      test -e /usr/local/lib/aarch64-linux-gnu/libndpi.so || \
-      { echo '❌ libndpi not installed at all! Real locations:'; find / -name 'libndpi*' 2>/dev/null; exit 1; }; }
+# 【根因修复】nDPI 的 Makefile 会拼接 $(prefix)+$(libdir)，产生 /usr/local/usr/local/lib 双层目录；
+# 这里统一归一化回 /usr/local/lib，并修正 .pc 路径、补齐链接名、硬校验
+RUN set -e; \
+    if [ -d /usr/local/usr/local/lib ]; then \
+      echo '🔧 nDPI doubled-prefix install detected, normalizing...'; \
+      mkdir -p /usr/local/lib; \
+      cp -a /usr/local/usr/local/lib/. /usr/local/lib/; \
+      rm -rf /usr/local/usr; \
+    fi; \
+    sed -i 's|/usr/local/usr/local/lib|/usr/local/lib|g' /usr/local/lib/pkgconfig/libndpi.pc 2>/dev/null || true; \
+    real=$(ls /usr/local/lib/libndpi.so.* 2>/dev/null | grep -v '\.so$' | head -n1); \
+    if [ -n "$real" ] && [ ! -e /usr/local/lib/libndpi.so ]; then \
+      ln -s "$(basename "$real")" /usr/local/lib/libndpi.so; \
+      echo "🔧 created linker symlink libndpi.so -> $(basename "$real")"; \
+    fi; \
+    ldconfig; \
+    echo '=== Final /usr/local/lib:'; ls -l /usr/local/lib; \
+    test -e /usr/local/lib/libndpi.so || { echo '❌ libndpi.so still missing!'; exit 1; }
 
 ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 ENV CFLAGS="-I/usr/local/include"
-# 【加固】链接时同时搜索所有候选库目录（ld 对不存在的 -L 目录静默忽略，无副作用）
-ENV LDFLAGS="-L/usr/local/lib -L/usr/local/lib/x86_64-linux-gnu -L/usr/local/lib/aarch64-linux-gnu"
+ENV LDFLAGS="-L/usr/local/lib"
 
 RUN git clone --depth 1 https://github.com/pmacct/pmacct.git /tmp/pmacct && \
     cd /tmp/pmacct && \
@@ -50,7 +52,6 @@ RUN git clone --depth 1 https://github.com/pmacct/pmacct.git /tmp/pmacct && \
     make -j2 && \
     make install
 
-# 清理静态库，控制镜像体积
 RUN rm -f /usr/local/lib/*.la /usr/local/lib/*.a
 
 
@@ -67,24 +68,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sqlite3 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# 整目录拷贝（含可能存在的多架构子目录），不用通配符，杜绝静默空拷
+# 整目录拷贝（不用通配符，杜绝静默空拷）
 COPY --from=builder /usr/local/lib/ /usr/local/lib/
 COPY --from=builder /usr/local/sbin/ /usr/local/sbin/
 
 COPY cleanup.sh /cleanup.sh
 COPY entrypoint.sh /entrypoint.sh
 
-# 【自检 2】把实际存在的库目录注册进 ld.so，刷新缓存后强制校验
+# 注册库目录 + 强制自检：缓存必须有 libndpi，pmacctd 依赖必须齐全
 RUN chmod +x /cleanup.sh /entrypoint.sh && \
-    { for d in /usr/local/lib /usr/local/lib/x86_64-linux-gnu /usr/local/lib/aarch64-linux-gnu; do \
-        [ -d "$d" ] && echo "$d"; \
-      done; } > /etc/ld.so.conf.d/pmacct.conf && \
+    echo '/usr/local/lib' > /etc/ld.so.conf.d/pmacct.conf && \
     ldconfig && \
     ldconfig -p | grep -q libndpi && \
     ! ldd /usr/local/sbin/pmacctd | grep -q "not found"
 
-# 双保险搜索路径
-ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib/x86_64-linux-gnu:/usr/local/lib/aarch64-linux-gnu
+ENV LD_LIBRARY_PATH=/usr/local/lib
 
 RUN mkdir -p /etc/pmacct /data
 
