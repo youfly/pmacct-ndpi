@@ -5,14 +5,14 @@ FROM debian:bookworm AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 【核心修复】：安装 libjansson-dev 替换之前的 json-c，满足 pmacct 的 JSON 需求
+# 【核心修复】：加入 zlib1g-dev（SQL 插件的强制依赖）
 RUN apt-get update && apt-get install -y \
     build-essential git autoconf automake libtool pkg-config \
-    libpcap-dev libsqlite3-dev libjansson-dev \
+    libpcap-dev libsqlite3-dev libjansson-dev zlib1g-dev \
     libmnl-dev libnuma-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 编译 nDPI (限制并发数为 2，防止 QEMU OOM)
+# 编译 nDPI
 RUN git clone --depth 1 https://github.com/ntop/nDPI.git /tmp/nDPI && \
     cd /tmp/nDPI && \
     ./autogen.sh && \
@@ -21,7 +21,7 @@ RUN git clone --depth 1 https://github.com/ntop/nDPI.git /tmp/nDPI && \
     make install && \
     ldconfig
 
-# 编译 pmacct (显式开启 json 支持)
+# 编译 pmacct
 ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
 ENV CFLAGS="-I/usr/local/include"
 ENV LDFLAGS="-L/usr/local/lib"
@@ -29,7 +29,6 @@ ENV LDFLAGS="-L/usr/local/lib"
 RUN git clone --depth 1 https://github.com/pmacct/pmacct.git /tmp/pmacct && \
     cd /tmp/pmacct && \
     ./autogen.sh && \
-    # 【核心修改】：加入 --enable-jansson 明确告诉 configure 使用 jansson 库
     ./configure --enable-ndpi --enable-sqlite3 --enable-json --enable-jansson --with-ndpi=/usr/local --prefix=/usr/local && \
     make -j2 && \
     make install
@@ -42,9 +41,9 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 【核心修复】：运行时安装 libjansson4 (Jansson 的运行时动态库)
+# 【核心修复】：运行时加入 zlib1g
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpcap0.8 libsqlite3-0 libjansson4 \
+    libpcap0.8 libsqlite3-0 libjansson4 zlib1g \
     libmnl0 libnuma1 \
     sqlite3 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
