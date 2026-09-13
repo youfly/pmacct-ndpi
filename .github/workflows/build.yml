@@ -1,47 +1,77 @@
-name: Build pmacct with nDPI
+name: Auto Build pmacct-nDPI (Smart)
 
 on:
-  workflow_dispatch:  # 允许在 GitHub 界面手动触发
   push:
-    branches: [ "main" ]
+   # branches: [ "main" ]
+  # 每天 UTC 0点 (北京时间早 8 点) 检查一次上游更新
+  schedule:
+    - cron: '0 0 * * *' 
+  workflow_dispatch: 
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write  # 允许推送到 ghcr.io
+      packages: write
 
     steps:
-      # 1. 拉取代码
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 设置 QEMU (用于模拟 ARM64 架构)
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # 3. 设置 Docker Buildx (用于多架构构建)
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 4. 登录 GitHub Container Registry
-      - name: Log in to GitHub Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 5. 构建并推送镜像
+      # 1. 获取上游最新的 Commit Hash
+      - name: Get upstream versions
+        id: versions
+        run: |
+          PMACCT_COMMIT=$(git ls-remote https://github.com/pmacct/pmacct.git HEAD | awk '{print $1}' | cut -c1-7)
+          echo "pmacct_tag=$PMACCT_COMMIT" >> $GITHUB_OUTPUT
+          echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
+
+      # 2. 【核心智能判断】：检查这个 Commit 的镜像是否已经存在于 GHCR 中
+      - name: Check if upstream changed
+        id: check
+        run: |
+          IMAGE_PATH="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pmacct-${{ steps.versions.outputs.pmacct_tag }}"
+          # 尝试获取镜像信息，如果成功(返回0)说明镜像已存在，上游没变
+          if docker manifest inspect $IMAGE_PATH > /dev/null 2>&1; then
+            echo "upstream_changed=false" >> $GITHUB_OUTPUT
+            echo "✅ Upstream not changed. Skipping build."
+          else
+            echo "upstream_changed=true" >> $GITHUB_OUTPUT
+            echo "🚀 Upstream updated! Starting build."
+          fi
+
+      # 3. 仅当上游有更新时，才生成 Tags
+      - name: Extract metadata
+        id: meta
+        if: steps.check.outputs.upstream_changed == 'true'
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=raw,value=${{ steps.versions.outputs.date_tag }}
+            type=raw,value=pmacct-${{ steps.versions.outputs.pmacct_tag }}
+
+      # 4. 仅当上游有更新时，才执行编译和推送
       - name: Build and push Docker image
+        if: steps.check.outputs.upstream_changed == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          # 如果只需 x86 架构，可删除 linux/arm64 以加快速度
-          platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/${{ github.repository_owner }}/pmacct-ndpi:latest
-          # 启用缓存加速后续构建
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
