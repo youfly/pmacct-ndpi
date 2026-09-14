@@ -40,15 +40,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 本地构建文件哈希（Dockerfile + 所有 .sh）
+      # 【修复 1】：使用 ** 递归匹配和明确文件名，防止 hashFiles 返回空值
       - name: Compute build context hash
         id: ctx
         run: |
-          CTX_HASH=$(echo "${{ hashFiles('Dockerfile', '*.sh') }}" | cut -c1-8)
+          RAW_HASH="${{ hashFiles('**/Dockerfile', '**/cleanup.sh', '**/entrypoint.sh') }}"
+          if [ -z "$RAW_HASH" ]; then
+            echo "⚠️ WARNING: hashFiles returned empty! Check if Dockerfile and .sh files exist in the repo."
+            CTX_HASH="empty"
+          else
+            CTX_HASH=$(echo "$RAW_HASH" | cut -c1-8)
+          fi
           echo "hash=$CTX_HASH" >> $GITHUB_OUTPUT
-          echo "📦 Local build-context hash: $CTX_HASH"
+          echo "📦 Raw hash: $RAW_HASH"
+          echo "📦 Short hash (used in tag): $CTX_HASH"
 
-      # 【精简】只追踪 pmacct 上游，不再检查 nDPI
       - name: Get upstream pmacct version
         id: versions
         run: |
@@ -56,6 +62,7 @@ jobs:
           echo "pmacct_tag=$PMACCT_COMMIT" >> $GITHUB_OUTPUT
           echo "date_tag=$(date +'%Y%m%d')" >> $GITHUB_OUTPUT
 
+      # 【修复 2】：使用 buildx imagetools 替代 docker manifest，并增加详细日志
       - name: Check if rebuild needed
         id: check
         run: |
@@ -64,13 +71,19 @@ jobs:
             echo "⚡ Force rebuild requested."
             exit 0
           fi
-          IMAGE_PATH="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pmacct-${{ steps.versions.outputs.pmacct_tag }}-ctx-${{ steps.ctx.outputs.hash }}"
-          if docker manifest inspect "$IMAGE_PATH" > /dev/null 2>&1; then
+          
+          TARGET_TAG="pmacct-${{ steps.versions.outputs.pmacct_tag }}-ctx-${{ steps.ctx.outputs.hash }}"
+          IMAGE_PATH="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${TARGET_TAG}"
+          
+          echo "🔍 Checking existence of target image: $IMAGE_PATH"
+          
+          # 使用 buildx imagetools inspect，对 registry 认证支持更好，不会静默误判
+          if docker buildx imagetools inspect "$IMAGE_PATH" > /dev/null 2>&1; then
             echo "need_build=false" >> $GITHUB_OUTPUT
-            echo "✅ pmacct upstream unchanged AND local files unchanged. Skipping."
+            echo "✅ Image already exists in registry. Skipping build."
           else
             echo "need_build=true" >> $GITHUB_OUTPUT
-            echo "🚀 Local files or pmacct upstream changed. Building."
+            echo "🚀 Image not found in registry. Starting build."
           fi
 
       - name: Extract metadata
