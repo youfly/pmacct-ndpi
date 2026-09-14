@@ -5,7 +5,7 @@ TIMESTAMP_COLUMN=${SQLITE_TIMESTAMP_COLUMN:-stamp_inserted}
 CHECK_INTERVAL=${CLEANUP_INTERVAL_SECONDS:-3600}
 TABLE_FILTER=${SQLITE_TABLE_FILTER:-}
 
-echo "🗑️ retention=${RETENTION_DAYS}d column=$TIMESTAMP_COLUMN dbs=$DB_PATHS"
+echo "🗑️ retention=${RETENTION_DAYS}d column=$TIMESTAMP_COLUMN dbs=$DB_PATHS table_filter=$TABLE_FILTER"
 sleep 15
 
 while true; do
