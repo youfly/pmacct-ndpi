@@ -74,12 +74,11 @@ COPY --from=builder /usr/local/sbin/ /usr/local/sbin/
 
 COPY dns-ingest.sh /usr/local/bin/dns-ingest.sh
 COPY dns_schema.sql /etc/pmacct/dns_schema.sql
-RUN chmod +x /usr/local/bin/dns-ingest.sh
 COPY cleanup.sh /cleanup.sh
 COPY entrypoint.sh /entrypoint.sh
 
 # 注册库目录 + 强制自检：缓存必须有 libndpi，pmacctd 依赖必须齐全
-RUN chmod +x /cleanup.sh /entrypoint.sh && \
+RUN chmod +x /cleanup.sh /entrypoint.sh /usr/local/bin/dns-ingest.sh && \
     echo '/usr/local/lib' > /etc/ld.so.conf.d/pmacct.conf && \
     ldconfig && \
     ldconfig -p | grep -q libndpi && \
