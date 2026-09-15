@@ -3,7 +3,7 @@
 # 职责: (可选)被动DNS采集链 → 后台清理 → 移交主进程(pmacctd)
 # DNS 总开关: DNS_ENABLED (默认 true; 想"不配置就完全不动 DNS"改为 false)
 
-DNS_ENABLED="${DNS_ENABLED:-true}"
+DNS_ENABLED="${DNS_ENABLED:-false}"
 DNS_IF="${DNS_INTERFACE:-eth1}"
 DNS_DB="${DNS_DB_PATH:-/data/pmacct.db}"
 DNS_REPLICAS="${DNS_REPLICAS:-}"
