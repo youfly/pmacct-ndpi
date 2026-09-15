@@ -19,6 +19,13 @@ services:
       CLEANUP_TIMESTAMP_COLUMN: stamp_inserted
       # 【可选】表名过滤（不配置则清理所有表）
       # - CLEANUP_TABLE_FILTER=traffic|dpi
+      DNS_ENABLED: "true"
+      DNS_INTERFACE: eth1
+      DNS_DB_PATH: /data/pmacct.db #DNS主库
+      #DNS_REPLICAS: /data/pmacct.db #DNS复制库
+      DNS_FLUSH_SECONDS: "60"      # ← 你要的"每分钟一次"
+      DNS_MAX_BUFFER: "5000"
+      DNS_RETENTION_DAYS: "30"
     volumes:
       - ./pmacctd.conf:/etc/pmacct/pmacctd.conf:ro
       - ./pmacct_data:/data
