@@ -27,6 +27,10 @@ services:
       DNS_FLUSH_SECONDS: "60"      # ← 你要的"每分钟一次"
       DNS_MAX_BUFFER: "5000"
       DNS_RETENTION_DAYS: "30"
+      ETL_ENABLED: "true"
+      FLOW_ETL_INTERVAL: "900"          # 运行周期 15 分钟
+      FLOW_ETL_BUCKET_MINUTES: "15"     # 统计桶粒度 15 分钟
+      FLOW_ETL_LAG_MINUTES: "2"
     volumes:
       - ./pmacctd.conf:/etc/pmacct/pmacctd.conf:ro
       - ./pmacct_data:/data
