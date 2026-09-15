@@ -88,7 +88,7 @@ RUN chmod +x /cleanup.sh /entrypoint.sh /usr/local/bin/dns-ingest.sh && \
 
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-RUN mkdir -p /etc/pmacct /data
+RUN mkdir -p /etc/pmacct /etc/pmacct/etl /data
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["pmacctd", "-f", "/etc/pmacct/pmacctd.conf"]
