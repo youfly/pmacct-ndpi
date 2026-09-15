@@ -36,6 +36,7 @@ while true; do
     if sqlite3 "$DB" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dns_map';" 2>/dev/null | grep -q 1; then
        sqlite3 "$DB" "PRAGMA busy_timeout=5000;
        DELETE FROM dns_map WHERE last_seen < datetime('now','-${DNS_RETENTION_DAYS} days','localtime');"
+       echo "✅ $(date): $DB 清理 dns_map 过期记录。保留 ${DNS_RETENTION_DAYS} days"
     fi
   done
   sleep "$CLEANUP_INTERVAL_SECONDS"
