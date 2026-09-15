@@ -20,7 +20,7 @@ services:
       # 【可选】表名过滤（不配置则清理所有表）
       # - CLEANUP_TABLE_FILTER=traffic|dpi
       DNS_ENABLED: "true"
-      DNS_DROP_PRIVATE: "false" # 私有地址(局域网)是否入DNS记录表。
+      DNS_DROP_PRIVATE: "false" # 私有地址(局域网)是否入DNS记录表。true表示扔掉不入库
       DNS_INTERFACE: eth1
       DNS_DB_PATH: /data/pmacct.db #DNS主库
       #DNS_REPLICAS: /data/pmacct.db #DNS复制库
