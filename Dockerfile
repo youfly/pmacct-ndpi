@@ -61,13 +61,12 @@ RUN rm -f /usr/local/lib/*.la /usr/local/lib/*.a
 FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-
-# 【修复】加入 bash (脚本必须), mawk (管道必须), procps (提供 ps/pgrep 调试命令)
+# 在 apt-get install 列表中加入 expect
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap0.8 libsqlite3-0 libjansson4 zlib1g \
     libmnl0 libnuma1 libnetfilter-log1 \
     sqlite3 ca-certificates dnscap \
-    bash mawk procps \
+    bash mawk procps expect \
     && rm -rf /var/lib/apt/lists/*
 
 # 整目录拷贝（不用通配符，杜绝静默空拷）
