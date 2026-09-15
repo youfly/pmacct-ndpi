@@ -9,6 +9,8 @@ DNS_DB="${DNS_DB_PATH:-/data/pmacct.db}"
 DNS_REPLICAS="${DNS_REPLICAS:-}"
 DNS_FLUSH="${DNS_FLUSH_SECONDS:-60}"
 DNS_REPL_INT="${DNS_REPLICA_INTERVAL:-60}"
+ETL_ENABLED="${ETL_ENABLED:-true}"
+ETL_DIR="${ETL_DIR:-/etc/pmacct/etl}"
 
 # ---------- DNS 1/3: 主库+所有副本 幂等应用表结构(每库仅一次) ----------
 dns_init_schema() {
@@ -63,6 +65,26 @@ dns_start_replicator() {
     ) &
     echo "🔄 dns replicator started: ${DNS_DB} -> ${DNS_REPLICAS} (every ${DNS_REPL_INT}s)."
 }
+
+start_etl_daemons() {
+    local script name found=0
+    for script in "$ETL_DIR"/etl_*.sh; do
+        [ -f "$script" ] || continue
+        found=1
+        name=$(basename "$script" .sh)
+        echo "🚀 Starting ETL daemon: $name ($script)"
+        (
+            while true; do
+                bash "$script"                      # 不依赖 +x；stdout 直入容器日志
+                echo "⚠️ ETL $name exited rc=$?, restart in 5s" >&2
+                sleep 5
+            done
+        ) &
+    done
+    [ "$found" = "0" ] && echo "ℹ️ no etl scripts in $ETL_DIR, skip."
+}
+
+if [ "$ETL_ENABLED" = "true" ]; then start_etl_daemons; fi
 
 # ---------- DNS 总闸门: 关闭时一切 DNS 逻辑零痕迹 ----------
 if [ "$DNS_ENABLED" = "true" ]; then
