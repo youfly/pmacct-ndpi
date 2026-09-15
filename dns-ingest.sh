@@ -1,5 +1,4 @@
 #!/bin/bash
-# dns-ingest.sh v3 — stdin 读 dnscap -d 文本输出；内存聚合，每 DNS_FLUSH_SECONDS 秒单事务批量 upsert
 DB=${DNS_DB_PATH:-/data/pmacct.db}
 FLUSH_SECONDS=${DNS_FLUSH_SECONDS:-60}
 MAX_BUFFER=${DNS_MAX_BUFFER:-5000}
@@ -29,32 +28,48 @@ flush() {
 trap 'flush' EXIT TERM INT
 
 while true; do
-    read -r -t "$FLUSH_SECONDS" -a T          # 按词切进数组 T
+    IFS= read -r -t "$FLUSH_SECONDS" line
     rc=$?
     if [ $rc -eq 0 ]; then
-        # 字段位: T[1]=日期 T[2]=时间 T[6]=QUERY/RESPONSE T[8]=qname; 若你的版本探针显示偏移, 只改这几处下标
-        [ "${T[6]:-}" = "RESPONSE" ] || continue
-        ts="${T[1]} ${T[2]%%.*}"              # 去微秒 → 'YYYY-MM-DD HH:MM:SS'(字典序=时间序)
-        dom="${T[8]%.}"                       # 去尾点
-        [ -n "$dom" ] || continue
-        for ((i=9; i<${#T[@]}; i++)); do
-            tok=${T[i]}
-            if [[ $tok =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || \
-               [[ $tok == *:* && $tok =~ ^[0-9a-fA-F:]+$ ]]; then
-                key="${dom}|${tok}"
-                if [ -n "${BUF_HITS[$key]:-}" ]; then
-                    BUF_HITS[$key]=$((BUF_HITS[$key]+1))
-                    [[ "$ts" < "${BUF_FIRST[$key]}" ]] && BUF_FIRST[$key]=$ts
-                    [[ "$ts" > "${BUF_LAST[$key]}" ]] && BUF_LAST[$key]=$ts
-                else
-                    BUF_HITS[$key]=1; BUF_FIRST[$key]=$ts; BUF_LAST[$key]=$ts
-                fi
+        # 1. 提取 flags (dns 后面的第一个词，如 QUERY,NOERROR,52550,qr|rd|ra)
+        payload=${line#*dns }
+        flags="${payload%% *}"
+        
+        # 2. 只处理响应包 (包含 qr 标志)
+        [[ "$flags" == *"qr"* ]] || continue
+        
+        # 3. 提取时间 (YYYY-MM-DD HH:MM:SS)，直接存入 SQLite DATETIME 列
+        ts=$(echo "$line" | awk '{print $2" "substr($3,1,8)}')
+        
+        # 4. 遍历包内的词，精准匹配 A 和 AAAA 答案记录
+        for token in $payload; do
+            if [[ "$token" == *",IN,A,"* ]]; then
+                domain="${token%%,IN,A,*}"
+                ip="${token##*,}"
+                domain="${domain%.}"  # 去掉根域名的尾点
+            elif [[ "$token" == *",IN,AAAA,"* ]]; then
+                domain="${token%%,IN,AAAA,*}"
+                ip="${token##*,}"
+                domain="${domain%.}"
+            else
+                continue
+            fi
+            
+            [ -n "$domain" ] && [ -n "$ip" ] || continue
+            
+            key="${domain}|${ip}"
+            if [ -n "${BUF_HITS[$key]:-}" ]; then
+                BUF_HITS[$key]=$((BUF_HITS[$key]+1))
+                [[ "$ts" < "${BUF_FIRST[$key]}" ]] && BUF_FIRST[$key]=$ts
+                [[ "$ts" > "${BUF_LAST[$key]}" ]] && BUF_LAST[$key]=$ts
+            else
+                BUF_HITS[$key]=1; BUF_FIRST[$key]=$ts; BUF_LAST[$key]=$ts
             fi
         done
         [ ${#BUF_HITS[@]} -ge "$MAX_BUFFER" ] && flush
     elif [ $rc -gt 128 ]; then
-        flush                                # 满一分钟
+        flush # 满 60 秒触发
     else
-        flush; echo "stdin EOF, exit (supervisor restarts)" >>"$ERRLOG"; exit 0
+        flush; echo "stdin EOF, exit" >>"$ERRLOG"; exit 0
     fi
 done
