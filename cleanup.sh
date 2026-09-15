@@ -8,6 +8,7 @@ CLEANUP_DB_PATHS=${CLEANUP_DB_PATHS:-/data/pmacct.db}    # 目标库列表，逗
 CLEANUP_TIMESTAMP_COLUMN=${CLEANUP_TIMESTAMP_COLUMN:-stamp_inserted}  # 时间字段名
 CLEANUP_INTERVAL_SECONDS=${CLEANUP_INTERVAL_SECONDS:-3600}            # 清理周期（秒）
 CLEANUP_TABLE_FILTER=${CLEANUP_TABLE_FILTER:-}           # 表名过滤正则，空=全部表
+DNS_RETENTION_DAYS=${DNS_RETENTION_DAYS:-30}
 
 echo "🗑️ days=${CLEANUP_DAYS} column=${CLEANUP_TIMESTAMP_COLUMN} dbs=${CLEANUP_DB_PATHS} filter=${CLEANUP_TABLE_FILTER}"
 sleep 15
@@ -32,6 +33,10 @@ while true; do
       fi
     done
     echo "✅ $(date): $DB 清理 $N 张表 (cutoff=$CUTOFF)"
+    if sqlite3 "$DB" "SELECT 1 FROM sqlite_master WHERE type='table' AND name='dns_map';" 2>/dev/null | grep -q 1; then
+       sqlite3 "$DB" "PRAGMA busy_timeout=5000;
+       DELETE FROM dns_map WHERE last_seen < datetime('now','-${DNS_RETENTION_DAYS} days','localtime');"
+    fi
   done
   sleep "$CLEANUP_INTERVAL_SECONDS"
 done
