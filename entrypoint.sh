@@ -30,7 +30,8 @@ dns_start_pipeline() {
         while true; do
             echo "🔄 Starting dnscap pipeline with unbuffer..."
             # 【终极修复】用 unbuffer 强制伪终端，击穿 dnscap 的 4KB 块缓冲！
-            unbuffer dnscap -g -i "$DNS_IF" -d 2>/dev/null | /usr/local/bin/dns-ingest.sh
+            unbuffer dnscap -g -i "$DNS_IF" -d 2>/dev/null | awk -f /usr/local/bin/dns-ingest.awk
+            # unbuffer dnscap -g -i "$DNS_IF" -d 2>/dev/null | /usr/local/bin/dns-ingest.sh
             
             echo "⚠️ dns pipeline exited, restart in 3s" >&2
             sleep 3
