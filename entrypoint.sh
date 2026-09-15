@@ -28,12 +28,19 @@ dns_init_schema() {
 dns_start_pipeline() {
     (
         while true; do
-            dnscap -i "$DNS_IF" -d 2>/dev/null | /usr/local/bin/dns-ingest.sh
+            stdbuf -oL dnscap -g -i "$DNS_IF" -d 2>/dev/null | \
+            stdbuf -oL awk '
+                /^\[/ { if (NR > 1 && buf != "") print buf; buf = $0; next }
+                { sub(/^[[:space:]]+/, ""); buf = buf " " $0 }
+                END { if (buf != "") print buf }
+            ' | \
+            /usr/local/bin/dns-ingest.sh
+            
             echo "⚠️ dns pipeline exited, restart in 3s" >&2
             sleep 3
         done
     ) &
-    echo "🕵️ dnscap started on $DNS_IF (batch=${DNS_FLUSH}s)."
+    echo "🕵️ dnscap pipeline started on $DNS_IF (batch=${DNS_FLUSH}s)."
 }
 
 # ---------- DNS 3/3: 副本库每分钟从主库幂等拉取(覆写式, 不双计) ----------
