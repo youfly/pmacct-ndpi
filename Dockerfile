@@ -74,6 +74,7 @@ COPY --from=builder /usr/local/lib/ /usr/local/lib/
 COPY --from=builder /usr/local/sbin/ /usr/local/sbin/
 
 COPY dns-ingest.sh /usr/local/bin/dns-ingest.sh
+COPY dns-ingest.awk /usr/local/bin/dns-ingest.awk
 COPY dns_schema.sql /etc/pmacct/dns_schema.sql
 COPY cleanup.sh /cleanup.sh
 COPY entrypoint.sh /entrypoint.sh
