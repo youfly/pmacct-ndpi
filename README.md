@@ -33,6 +33,7 @@ services:
       FLOW_ETL_LAG_MINUTES: "2"
     volumes:
       - ./pmacctd.conf:/etc/pmacct/pmacctd.conf:ro
+      - ./etl:/etc/pmacct/etl:ro
       - ./pmacct_data:/data
     restart: unless-stopped
 
