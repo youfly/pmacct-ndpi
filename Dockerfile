@@ -62,10 +62,12 @@ FROM debian:bookworm-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# 【修复】加入 bash (脚本必须), mawk (管道必须), procps (提供 ps/pgrep 调试命令)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap0.8 libsqlite3-0 libjansson4 zlib1g \
     libmnl0 libnuma1 libnetfilter-log1 \
     sqlite3 ca-certificates dnscap \
+    bash mawk procps \
     && rm -rf /var/lib/apt/lists/*
 
 # 整目录拷贝（不用通配符，杜绝静默空拷）
@@ -87,6 +89,9 @@ RUN chmod +x /cleanup.sh /entrypoint.sh /usr/local/bin/dns-ingest.sh && \
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
 RUN mkdir -p /etc/pmacct /data
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["pmacctd", "-f", "/etc/pmacct/pmacctd.conf"]
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["pmacctd", "-f", "/etc/pmacct/pmacctd.conf"]
