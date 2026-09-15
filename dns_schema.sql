@@ -4,3 +4,4 @@ CREATE TABLE IF NOT EXISTS dns_map (
   hits INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (domain, ip));
 CREATE INDEX IF NOT EXISTS idx_dns_ip ON dns_map(ip);
+CREATE INDEX IF NOT EXISTS idx_dns_lastseen ON dns_map(last_seen);
