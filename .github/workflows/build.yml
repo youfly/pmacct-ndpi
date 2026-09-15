@@ -44,7 +44,7 @@ jobs:
       - name: Compute build context hash
         id: ctx
         run: |
-          RAW_HASH="${{ hashFiles('**/Dockerfile', '**/cleanup.sh', '**/entrypoint.sh') }}"
+          RAW_HASH="${{ hashFiles('**/Dockerfile', '**/*.sh', '**/*.sql') }}"
           if [ -z "$RAW_HASH" ]; then
             echo "⚠️ WARNING: hashFiles returned empty! Check if Dockerfile and .sh files exist in the repo."
             CTX_HASH="empty"
