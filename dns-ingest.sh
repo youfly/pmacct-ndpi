@@ -7,7 +7,6 @@ ERRLOG=/tmp/dns-ingest.err
 declare -A BUF_HITS BUF_FIRST BUF_LAST
 LAST_FLUSH_S=$SECONDS
 
-# 核心处理函数：解析单行（已合并）并放入 Buffer
 process_packet() {
     local line="$1"
     line=${line//\\/}
@@ -68,27 +67,22 @@ while true; do
     rc=$?
     
     if [ $rc -eq 0 ]; then
-        # 遇到新包的开头 [ ，处理上一个包
         if [[ "$line" == \[* ]]; then
             [ -n "$current_packet" ] && process_packet "$current_packet"
             current_packet="$line"
         else
-            # 续行，拼接（去掉前导空格）
             stripped="${line#"${line%%[![:space:]]*}"}"
             current_packet="$current_packet $stripped"
         fi
         
-        # 检查是否需要 flush
         if [ $((SECONDS - LAST_FLUSH_S)) -ge "$FLUSH_SECONDS" ] || \
            [ ${#BUF_HITS[@]} -ge "$MAX_BUFFER" ]; then
             flush
         fi
     elif [ $rc -gt 128 ]; then
-        # 超时触发
         [ -n "$current_packet" ] && { process_packet "$current_packet"; current_packet=""; }
         flush
     else
-        # EOF 退出
         [ -n "$current_packet" ] && process_packet "$current_packet"
         flush
         exit 0
