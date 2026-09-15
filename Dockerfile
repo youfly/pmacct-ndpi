@@ -65,7 +65,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap0.8 libsqlite3-0 libjansson4 zlib1g \
     libmnl0 libnuma1 libnetfilter-log1 \
-    sqlite3 ca-certificates passivedns\
+    sqlite3 ca-certificates dnscap \
     && rm -rf /var/lib/apt/lists/*
 
 # 整目录拷贝（不用通配符，杜绝静默空拷）
