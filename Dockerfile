@@ -65,13 +65,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpcap0.8 libsqlite3-0 libjansson4 zlib1g \
     libmnl0 libnuma1 libnetfilter-log1 \
-    sqlite3 ca-certificates \
+    sqlite3 ca-certificates passivedns\
     && rm -rf /var/lib/apt/lists/*
 
 # 整目录拷贝（不用通配符，杜绝静默空拷）
 COPY --from=builder /usr/local/lib/ /usr/local/lib/
 COPY --from=builder /usr/local/sbin/ /usr/local/sbin/
 
+COPY dns-ingest.sh /usr/local/bin/dns-ingest.sh
+COPY dns_schema.sql /etc/pmacct/dns_schema.sql
+RUN chmod +x /usr/local/bin/dns-ingest.sh
 COPY cleanup.sh /cleanup.sh
 COPY entrypoint.sh /entrypoint.sh
 
